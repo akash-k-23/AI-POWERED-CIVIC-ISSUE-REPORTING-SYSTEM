@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #1f2d3d;
+    }
+    .dropzone {
+      min-height: 112px;
+      padding: 16px;
+      border: 2px dashed #cfe0ff;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #f9fbff 0%, #f3f7ff 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease;
+    }
+    .dropzone:hover, .dropzone.dragging {
+      border-color: #2d6df6;
+      background: #edf4ff;
+    }
+    .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .hint, .filename { color: #67768d; font-size: 13px; }
+    .error { color: #b43b3b; font-size: 13px; margin-top: 5px; }
+    .remove {
+      margin-top: 9px;
+      border: 0;
+      background: transparent;
+      color: #2d6df6;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Choose, drop, or paste an image">
+    <div>
+      <div class="title">Drag and drop, click to browse, or paste an image</div>
+      <div class="hint">JPG or PNG · up to 8 MB · Ctrl+V / Cmd+V</div>
+      <div id="filename" class="filename"></div>
+      <div id="error" class="error" role="alert"></div>
+      <button id="remove" class="remove" type="button" hidden>Remove image</button>
+    </div>
+  </div>
+  <input id="file-input" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" hidden>
+  <script>
+    const zone = document.getElementById("dropzone");
+    const input = document.getElementById("file-input");
+    const filename = document.getElementById("filename");
+    const error = document.getElementById("error");
+    const remove = document.getElementById("remove");
+    const maxBytes = 8 * 1024 * 1024;
+    let componentValue = null;
+
+    function sendValue(value) {
+      componentValue = value;
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: value
+      }, "*");
+      renderValue();
+    }
+
+    function renderValue() {
+      filename.textContent = componentValue ? componentValue.name : "";
+      remove.hidden = !componentValue;
+      error.textContent = "";
+    }
+
+    function readImage(file) {
+      if (!file) return;
+      const supportedType = ["image/jpeg", "image/png"].includes(file.type.toLowerCase());
+      const supportedName = /\.(jpe?g|png)$/i.test(file.name || "");
+      if (!supportedType && !supportedName) {
+        error.textContent = "Choose a JPG or PNG image.";
+        return;
+      }
+      if (file.size > maxBytes) {
+        error.textContent = "The image must be smaller than 8 MB.";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => sendValue({
+        name: file.name || "pasted_image.png",
+        data: reader.result
+      });
+      reader.onerror = () => { error.textContent = "The image could not be read."; };
+      reader.readAsDataURL(file);
+    }
+
+    zone.addEventListener("click", (event) => {
+      if (event.target === remove) return;
+      input.click();
+    });
+    zone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        input.click();
+      }
+    });
+    input.addEventListener("change", () => {
+      readImage(input.files && input.files[0]);
+      input.value = "";
+    });
+    zone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      zone.classList.add("dragging");
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("dragging"));
+    zone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      zone.classList.remove("dragging");
+      readImage(event.dataTransfer && event.dataTransfer.files[0]);
+    });
+    document.addEventListener("paste", (event) => {
+      const items = event.clipboardData && event.clipboardData.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file" && ["image/jpeg", "image/png"].includes(item.type.toLowerCase())) {
+          event.preventDefault();
+          readImage(item.getAsFile());
+          return;
+        }
+      }
+    });
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      sendValue(null);
+    });
+
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:componentReady",
+      apiVersion: 1
+    }, "*");
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: 128
+    }, "*");
+  </script>
+</body>
+</html>
